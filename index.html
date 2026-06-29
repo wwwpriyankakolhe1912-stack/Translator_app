@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Translate — every script welcome</title>
+  <meta name="description" content="A quick translator that shows every language in its own script.">
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<div class="scene">
+  <header class="intro">
+    <p class="eyebrow">Quick translate</p>
+    <h1>Type once, read it in its own script.</h1>
+  </header>
+
+  <main class="translator" aria-label="Translator">
+    <section class="panel panel--input" aria-label="Source text">
+      <div class="panel-head">
+        <div class="lang-display">
+          <span class="lang-native" id="sourceNative">English</span>
+          <span class="lang-latin" id="sourceLatin">English</span>
+          <select id="sourceSelect" class="lang-select" aria-label="Source language"></select>
+        </div>
+      </div>
+      <textarea id="sourceText" class="text-area" maxlength="500" placeholder="Start typing…" aria-label="Text to translate"></textarea>
+      <div class="panel-foot">
+        <span class="char-count"><span id="charCount">0</span>/500</span>
+      </div>
+    </section>
+
+    <button id="swapBtn" class="swap-btn" type="button" aria-label="Swap languages">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+        <path d="M7 7h11l-3.5-3.5M17 17H6l3.5 3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+
+    <section class="panel panel--output" aria-label="Translation">
+      <div class="panel-head">
+        <div class="lang-display">
+          <span class="lang-native" id="targetNative">हिन्दी</span>
+          <span class="lang-latin" id="targetLatin">Hindi</span>
+          <select id="targetSelect" class="lang-select" aria-label="Target language"></select>
+        </div>
+      </div>
+      <div class="output-area">
+        <p id="outputText" class="output-text placeholder" aria-live="polite">Translation will appear here.</p>
+        <div class="loading-bar" aria-hidden="true"></div>
+      </div>
+      <div class="panel-foot panel-foot--actions">
+        <button id="copyBtn" class="text-btn" type="button" disabled>Copy</button>
+        <button id="listenBtn" class="text-btn" type="button" disabled>Listen</button>
+      </div>
+    </section>
+  </main>
+
+  <div class="controls">
+    <button id="translateBtn" class="primary-btn" type="button">Translate</button>
+    <p class="hint">Translates as you type, or press Translate.</p>
+  </div>
+
+  <p class="credit">Translations via <a href="https://mymemory.translated.net/" target="_blank" rel="noopener">MyMemory</a> — free, no key required.</p>
+</div>
+
+<script>
+const LANGUAGES = [
+  { code:'en', en:'English',    native:'English',           speech:'en-US' },
+  { code:'hi', en:'Hindi',      native:'हिन्दी',              speech:'hi-IN' },
+  { code:'es', en:'Spanish',    native:'Español',           speech:'es-ES' },
+  { code:'fr', en:'French',     native:'Français',          speech:'fr-FR' },
+  { code:'de', en:'German',     native:'Deutsch',           speech:'de-DE' },
+  { code:'zh', en:'Chinese',    native:'中文',                speech:'zh-CN' },
+  { code:'ja', en:'Japanese',   native:'日本語',              speech:'ja-JP' },
+  { code:'ko', en:'Korean',     native:'한국어',              speech:'ko-KR' },
+  { code:'ar', en:'Arabic',     native:'العربية',            speech:'ar-SA' },
+  { code:'pt', en:'Portuguese', native:'Português',         speech:'pt-PT' },
+  { code:'ru', en:'Russian',    native:'Русский',            speech:'ru-RU' },
+  { code:'it', en:'Italian',    native:'Italiano',          speech:'it-IT' },
+  { code:'bn', en:'Bengali',    native:'বাংলা',              speech:'bn-IN' },
+  { code:'ta', en:'Tamil',      native:'தமிழ்',              speech:'ta-IN' },
+  { code:'te', en:'Telugu',     native:'తెలుగు',             speech:'te-IN' },
+  { code:'mr', en:'Marathi',    native:'मराठी',              speech:'mr-IN' },
+  { code:'gu', en:'Gujarati',   native:'ગુજરાતી',            speech:'gu-IN' },
+  { code:'pa', en:'Punjabi',    native:'ਪੰਜਾਬੀ',             speech:'pa-IN' },
+  { code:'ur', en:'Urdu',       native:'اردو',               speech:'ur-PK' },
+  { code:'tr', en:'Turkish',    native:'Türkçe',             speech:'tr-TR' },
+  { code:'nl', en:'Dutch',      native:'Nederlands',        speech:'nl-NL' },
+  { code:'id', en:'Indonesian', native:'Bahasa Indonesia',  speech:'id-ID' },
+  { code:'vi', en:'Vietnamese', native:'Tiếng Việt',         speech:'vi-VN' },
+  { code:'th', en:'Thai',       native:'ไทย',                speech:'th-TH' },
+];
+const byCode = Object.fromEntries(LANGUAGES.map(l => [l.code, l]));
+
+const sourceSelect = document.getElementById('sourceSelect');
+const targetSelect = document.getElementById('targetSelect');
+const sourceNative = document.getElementById('sourceNative');
+const sourceLatin = document.getElementById('sourceLatin');
+const targetNative = document.getElementById('targetNative');
+const targetLatin = document.getElementById('targetLatin');
+const sourceText = document.getElementById('sourceText');
+const outputText = document.getElementById('outputText');
+const charCount = document.getElementById('charCount');
+const swapBtn = document.getElementById('swapBtn');
+const translateBtn = document.getElementById('translateBtn');
+const copyBtn = document.getElementById('copyBtn');
+const listenBtn = document.getElementById('listenBtn');
+const outputPanel = document.querySelector('.panel--output');
+
+function populateSelect(select){
+  select.innerHTML = LANGUAGES.map(l => `<option value="${l.code}">${l.native} — ${l.en}</option>`).join('');
+}
+populateSelect(sourceSelect);
+populateSelect(targetSelect);
+sourceSelect.value = 'en';
+targetSelect.value = 'hi';
+
+function syncLabel(select, nativeEl, latinEl){
+  const lang = byCode[select.value];
+  nativeEl.textContent = lang.native;
+  latinEl.textContent = lang.en;
+}
+syncLabel(sourceSelect, sourceNative, sourceLatin);
+syncLabel(targetSelect, targetNative, targetLatin);
+
+let debounceTimer;
+let requestId = 0;
+
+function scheduleTranslate(){
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(runTranslate, 600);
+}
+
+function setOutput(text, mode){
+  outputText.textContent = text;
+  outputText.classList.remove('placeholder', 'is-error');
+  if (mode) outputText.classList.add(mode);
+  const ok = mode === undefined;
+  copyBtn.disabled = !ok;
+  listenBtn.disabled = !ok || !('speechSynthesis' in window);
+}
+
+async function runTranslate(){
+  const text = sourceText.value.trim();
+  if (!text){
+    setOutput('Translation will appear here.', 'placeholder');
+    return;
+  }
+  const myId = ++requestId;
+  outputPanel.classList.add('is-loading');
+  try{
+    const params = new URLSearchParams({
+      q: text,
+      langpair: `${sourceSelect.value}|${targetSelect.value}`,
+    });
+    const res = await fetch(`https://api.mymemory.translated.net/get?${params.toString()}`);
+    if (!res.ok) throw new Error('network');
+    const data = await res.json();
+    if (myId !== requestId) return;
+    if (data.responseStatus !== 200 || !data.responseData) throw new Error('api');
+    setOutput(data.responseData.translatedText);
+  }catch(err){
+    if (myId !== requestId) return;
+    setOutput("Translation didn't go through. Check your connection and try again.", 'is-error');
+  }finally{
+    if (myId === requestId) outputPanel.classList.remove('is-loading');
+  }
+}
+
+sourceText.addEventListener('input', () => {
+  charCount.textContent = sourceText.value.length;
+  scheduleTranslate();
+});
+
+translateBtn.addEventListener('click', () => {
+  clearTimeout(debounceTimer);
+  runTranslate();
+});
+
+sourceSelect.addEventListener('change', () => {
+  syncLabel(sourceSelect, sourceNative, sourceLatin);
+  if (sourceText.value.trim()) runTranslate();
+});
+
+targetSelect.addEventListener('change', () => {
+  syncLabel(targetSelect, targetNative, targetLatin);
+  if (sourceText.value.trim()) runTranslate();
+});
+
+let flipped = false;
+swapBtn.addEventListener('click', () => {
+  flipped = !flipped;
+  swapBtn.classList.toggle('is-flipped', flipped);
+
+  const s = sourceSelect.value;
+  const t = targetSelect.value;
+  sourceSelect.value = t;
+  targetSelect.value = s;
+  syncLabel(sourceSelect, sourceNative, sourceLatin);
+  syncLabel(targetSelect, targetNative, targetLatin);
+
+  const hasOutput = !outputText.classList.contains('placeholder') && !outputText.classList.contains('is-error');
+  if (hasOutput){
+    sourceText.value = outputText.textContent;
+    charCount.textContent = sourceText.value.length;
+  }
+  if (sourceText.value.trim()) runTranslate();
+});
+
+copyBtn.addEventListener('click', async () => {
+  try{
+    await navigator.clipboard.writeText(outputText.textContent);
+    const original = 'Copy';
+    copyBtn.textContent = 'Copied';
+    copyBtn.classList.add('is-confirmed');
+    setTimeout(() => {
+      copyBtn.textContent = original;
+      copyBtn.classList.remove('is-confirmed');
+    }, 1500);
+  }catch(err){
+    copyBtn.textContent = 'Select & copy manually';
+    setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1800);
+  }
+});
+
+listenBtn.addEventListener('click', () => {
+  if (!('speechSynthesis' in window)) return;
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(outputText.textContent);
+  utter.lang = byCode[targetSelect.value].speech;
+  window.speechSynthesis.speak(utter);
+});
+
+if (!('speechSynthesis' in window)){
+  listenBtn.title = 'Voice playback not supported in this browser';
+}
+</script>
+</body>
+</html>
